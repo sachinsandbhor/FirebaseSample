@@ -1,33 +1,104 @@
 package com.sachinsandbhor.firebasesample
 
-import androidx.appcompat.app.AppCompatActivity
+import android.content.Intent
 import android.os.Bundle
 import android.text.Editable
 import android.text.InputFilter
 import android.text.TextWatcher
 import android.view.View
 import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.firebase.ui.auth.AuthUI
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
 import kotlinx.android.synthetic.main.activity_main.*
+
 
 class MainActivity : AppCompatActivity() {
 
     val DEFAULT_MSG_LENGTH_LIMIT = 10000
 
 
-    lateinit var mFirebaseDatabase: FirebaseDatabase
-    lateinit var mDatabaseReference: DatabaseReference
     lateinit var chatAdapter: ChatAdapter
 
-    val mUsername: String = "anonymus"
+    // Firebase components
+    private val mFirebaseDatabase: FirebaseDatabase by lazy { FirebaseDatabase.getInstance() }
+    private val mDatabaseReference: DatabaseReference by lazy { mFirebaseDatabase.getReference().child("messages") }
+    private val mFirebaseAuth: FirebaseAuth by lazy { FirebaseAuth.getInstance() }
+
+    lateinit var mAuthStateListener: FirebaseAuth.AuthStateListener
+    lateinit var mChildEventListener: ChildEventListener
+
+    var mUsername: String = "anonymus"
+    val RC_SIGN_IN = 1
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        mFirebaseDatabase = FirebaseDatabase.getInstance()
-        mDatabaseReference = mFirebaseDatabase.getReference().child("messages")
         setupUi()
+        setupAuthStateListener()
+    }
+
+    private fun attachDatabaseReadListener() {
+        val childEventListener = object : ChildEventListener {
+            override fun onChildAdded(dataSnapshot: DataSnapshot, s: String?) {
+                val friendlyMessage = dataSnapshot.getValue(FriendlyMessage::class.java)
+                chatAdapter.add(friendlyMessage!!)
+                chatAdapter.addUsername(mUsername)
+                messageListView.smoothScrollToPosition(chatAdapter.itemCount - 1)
+            }
+
+            override fun onChildChanged(dataSnapshot: DataSnapshot, s: String?) {}
+            override fun onChildRemoved(dataSnapshot: DataSnapshot) {}
+            override fun onChildMoved(dataSnapshot: DataSnapshot, s: String?) {}
+            override fun onCancelled(databaseError: DatabaseError) {}
+        }
+        mDatabaseReference.addChildEventListener(childEventListener)
+    }
+
+    private fun detachDatabaseReadListener() {
+        if(::mChildEventListener.isInitialized) {
+            mDatabaseReference.removeEventListener(mChildEventListener)
+        }
+    }
+
+    private fun setupAuthStateListener() {
+        mAuthStateListener = FirebaseAuth.AuthStateListener { firebaseAuth ->
+            val user = firebaseAuth.currentUser
+            if (user != null) {
+                // User is signed in
+                onSignedInInitialize(user.getDisplayName());
+                Toast.makeText(this@MainActivity, "You're now signed in. Welcome to FriendlyChat.", Toast.LENGTH_SHORT)
+                    .show()
+            } else {
+                // User is signed out
+                onSignedOutCleanup();
+                val provider = arrayListOf(
+                    AuthUI.IdpConfig.GoogleBuilder().build(),
+                    AuthUI.IdpConfig.EmailBuilder().build()
+                )
+                startActivityForResult(
+                    AuthUI.getInstance()
+                        .createSignInIntentBuilder()
+                        .setIsSmartLockEnabled(false)
+                        .setAvailableProviders(provider)
+                        .build(),
+                    RC_SIGN_IN
+                )
+            }
+        }
+
+    }
+
+    private fun onSignedOutCleanup() {
+        mUsername = ""
+        chatAdapter.clear()
+    }
+
+    private fun onSignedInInitialize(displayName: String?) {
+        mUsername = displayName!!
+        attachDatabaseReadListener()
     }
 
     private fun setupUi() {
@@ -65,29 +136,22 @@ class MainActivity : AppCompatActivity() {
             messageEditText.setText("")
         })
 
-        mDatabaseReference.addChildEventListener(object : ChildEventListener {
-            override fun onCancelled(p0: DatabaseError) {
-                Toast.makeText(this@MainActivity, p0.message, Toast.LENGTH_LONG).show()
-            }
-
-            override fun onChildMoved(p0: DataSnapshot, p1: String?) {
-                TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
-            }
-
-            override fun onChildChanged(p0: DataSnapshot, p1: String?) {
-                TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
-            }
-
-            override fun onChildAdded(dataSnapshot: DataSnapshot, p1: String?) {
-                val friendlyMessage = dataSnapshot.getValue(FriendlyMessage::class.java)
-                chatAdapter.add(friendlyMessage!!)
-                messageListView.smoothScrollToPosition(chatAdapter.itemCount -1)
-            }
-
-            override fun onChildRemoved(p0: DataSnapshot) {
-                TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
-            }
-
-        })
     }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        mFirebaseAuth.addAuthStateListener(mAuthStateListener)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        mFirebaseAuth.removeAuthStateListener(mAuthStateListener)
+        detachDatabaseReadListener()
+        chatAdapter.clear()
+    }
+
 }

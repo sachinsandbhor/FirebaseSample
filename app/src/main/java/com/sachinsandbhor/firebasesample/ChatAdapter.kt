@@ -1,5 +1,7 @@
 package com.sachinsandbhor.firebasesample
 
+import android.util.Log
+import android.view.Gravity
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import android.view.LayoutInflater
@@ -7,9 +9,11 @@ import android.view.View
 import com.squareup.picasso.Picasso
 import kotlinx.android.synthetic.main.item_message.view.*
 
+
 class ChatAdapter() : RecyclerView.Adapter<ChatAdapter.ViewHolder>() {
 
     private var chatMessageList: MutableList<FriendlyMessage> = mutableListOf()
+    private var username = ""
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
         val layoutInflater = LayoutInflater.from(parent.context)
@@ -22,7 +26,7 @@ class ChatAdapter() : RecyclerView.Adapter<ChatAdapter.ViewHolder>() {
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        holder.setData(chatMessageList.get(position))
+        holder.setData(chatMessageList.get(position), username)
     }
 
     fun add(chatMessage: FriendlyMessage) {
@@ -30,8 +34,23 @@ class ChatAdapter() : RecyclerView.Adapter<ChatAdapter.ViewHolder>() {
         notifyDataSetChanged()
     }
 
+    fun clear() {
+        chatMessageList.clear()
+    }
+
+    fun addUsername(mUsername: String) {
+        username = mUsername
+    }
+
     class ViewHolder(val messageContainer: View) : RecyclerView.ViewHolder(messageContainer) {
-        fun setData(message: FriendlyMessage) {
+        fun setData(message: FriendlyMessage, mUsername: String) {
+            Log.e("Chat", mUsername)
+            if(message.name.equals(mUsername)) {
+                messageContainer.msg_container.gravity = Gravity.RIGHT or Gravity.END
+            }else {
+                messageContainer.msg_container.gravity = Gravity.LEFT or Gravity.START
+            }
+
             var isPhoto:Boolean = message.photoUrl != null && message.photoUrl != ""
             if(isPhoto) {
                 //messageTextView
